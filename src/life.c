@@ -12,7 +12,7 @@
 #define life_bitmap_size (life_bitmap_stride * screen_height)
   
 #define cell_live (0b10000000)
-#define cell_dead (0b01111111)
+#define cell_dead (0b00000000)
 #define cell_neighbours (0b00001111)
 
 static uint8_t *state[2];
@@ -44,22 +44,25 @@ void init_life() {
   */
   
   
-  int ix_row = screen_width_cells * 29;
-  int x = 10;
+  int pos = screen_width_cells / 2;
+  int ix_row = screen_width_cells * (screen_height_cells / 2);
+  int x = pos;
   
   APP_LOG(APP_LOG_LEVEL_INFO, "Initializing buffer.");
   
   state[0][ix_row + x++] = cell_dead | 0; state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 2; state[0][ix_row + x++] = cell_dead | 2; state[0][ix_row + x++] = cell_dead | 1;
-  ix_row += screen_width_cells; x = 10;
-  state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 2; state[0][ix_row + x++] = cell_live | 3; state[0][ix_row + x++] = cell_live | 2; state[0][ix_row + x++] = cell_dead | 1;
-  ix_row += screen_width_cells; x = 10;
+  ix_row += screen_width_cells; x = pos;
+  state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 3; state[0][ix_row + x++] = cell_live | 3; state[0][ix_row + x++] = cell_live | 2; state[0][ix_row + x++] = cell_dead | 1;
+  ix_row += screen_width_cells; x = pos;
   state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_live | 3; state[0][ix_row + x++] = cell_live | 4; state[0][ix_row + x++] = cell_dead | 4; state[0][ix_row + x++] = cell_dead | 1;
-  ix_row += screen_width_cells; x = 10;
+  ix_row += screen_width_cells; x = pos;
   state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 3; state[0][ix_row + x++] = cell_live | 2; state[0][ix_row + x++] = cell_dead | 2; state[0][ix_row + x++] = cell_dead | 0;
-  ix_row += screen_width_cells; x = 10;
+  ix_row += screen_width_cells; x = pos;
   state[0][ix_row + x++] = cell_dead | 0; state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 1; state[0][ix_row + x++] = cell_dead | 0;
     
   APP_LOG(APP_LOG_LEVEL_INFO, "Initialized buffer.");
+  
+  memcpy(state[1], state[0], life_state_buffer_size);
   
 }
 
@@ -69,7 +72,8 @@ void live_life(GBitmap* output) {
   
   // for now: just render state to bitmap.
   
-  uint8_t *state_pointer = state[0];
+  uint8_t *state_pointer1 = state[0];
+  uint8_t *state_pointer2 = state[1];
   uint8_t *bmp_pointer1 = bmp;
   uint8_t *bmp_pointer2 = bmp + output->row_size_bytes;
   
@@ -85,26 +89,81 @@ void live_life(GBitmap* output) {
   for (int row=0; row < screen_height_cells; row++) {
     for (int col=0; col < screen_width_cells; col += 4) {
       uint8_t pixel =
-        ((state_pointer[0] & cell_live) >> 7 << 0) +
-        ((state_pointer[0] & cell_live) >> 7 << 1) +
-        ((state_pointer[1] & cell_live) >> 7 << 2) +
-        ((state_pointer[1] & cell_live) >> 7 << 3) +
-        ((state_pointer[2] & cell_live) >> 7 << 4) +
-        ((state_pointer[2] & cell_live) >> 7 << 5) +
-        ((state_pointer[3] & cell_live) >> 7 << 6) +
-        ((state_pointer[3] & cell_live) >> 7 << 7);
+        ((state_pointer1[0] & cell_live) >> 7 << 0) +
+        ((state_pointer1[0] & cell_live) >> 7 << 1) +
+        ((state_pointer1[1] & cell_live) >> 7 << 2) +
+        ((state_pointer1[1] & cell_live) >> 7 << 3) +
+        ((state_pointer1[2] & cell_live) >> 7 << 4) +
+        ((state_pointer1[2] & cell_live) >> 7 << 5) +
+        ((state_pointer1[3] & cell_live) >> 7 << 6) +
+        ((state_pointer1[3] & cell_live) >> 7 << 7);
 
       bmp_pointer1[0] = pixel;
       bmp_pointer2[0] = pixel;
 
+      //if ((uint32_t)state_pointer1[0] != 0) {
+        // something was non-zero: perform life algorithm
+        // for now: easy-mode - ignore cells that we might need to wrap for.
+        if ((row != 0) && (col != 0) && (row != (screen_height_cells-1)) && (col != (screen_width_cells-1))) {
+          for (int i = 0; i < 4; i++) {
+            uint8_t neighbours = state_pointer1[i] & cell_neighbours;              
+            if (neighbours > 8) {
+              APP_LOG(APP_LOG_LEVEL_ERROR, "Erroneous neighbour count! %u", neighbours);
+            }
+            if ((state_pointer1[i] & cell_live) != 0) {
+              // cell was live
+              //APP_LOG(APP_LOG_LEVEL_INFO, "Cell at row %u by col %u is alive with %u neighbours", row, col + i, neighbours);
+              if ((neighbours < 2) || (neighbours > 3)) {
+                //APP_LOG(APP_LOG_LEVEL_INFO, "Killed cell at row %u by col %u", row, col + i);
+                // death by loneliness / overcrowding
+                state_pointer2[i] &= cell_neighbours;  // mask out state bit, leave only neighbour count
+                // update neighbour counts of neighbours
+                state_pointer2[i - screen_width_cells - 1] -= 1;
+                state_pointer2[i - screen_width_cells + 0] -= 1;
+                state_pointer2[i - screen_width_cells + 1] -= 1;
+                state_pointer2[i - 1] -= 1;
+                state_pointer2[i + 1] -= 1;
+                state_pointer2[i + screen_width_cells - 1] -= 1;
+                state_pointer2[i + screen_width_cells + 0] -= 1;
+                state_pointer2[i + screen_width_cells + 1] -= 1;
+              }
+            }
+            else {
+              // cell was dead
+              if (neighbours > 0) {
+                //APP_LOG(APP_LOG_LEVEL_INFO, "Cell at row %u by col %u is dead with %u neighbours", row, col + i, neighbours);
+              }
+              if (neighbours == 3) {
+                //APP_LOG(APP_LOG_LEVEL_INFO, "Alived cell at row %u by col %u", row, col + i);
+                // new cell born!                
+                state_pointer2[i] |= cell_live;
+                // update neighbour counts of neighbours
+                state_pointer2[i - screen_width_cells - 1] += 1;
+                state_pointer2[i - screen_width_cells + 0] += 1;
+                state_pointer2[i - screen_width_cells + 1] += 1;
+                state_pointer2[i - 1] += 1;
+                state_pointer2[i + 1] += 1;
+                state_pointer2[i + screen_width_cells - 1] += 1;
+                state_pointer2[i + screen_width_cells + 0] += 1;
+                state_pointer2[i + screen_width_cells + 1] += 1;
+              }
+            }
+          }
+        }        
+      //}
+      
       bmp_pointer1++;
       bmp_pointer2++;    
-      state_pointer += 4;
+      state_pointer1 += 4;
+      state_pointer2 += 4;
     }
     // account for stride and skip a row (because we're doubling them)
     bmp_pointer1 += stride_extra + output->row_size_bytes;
     bmp_pointer2 += stride_extra + output->row_size_bytes;
   }
+  
+  // copy altered buffer for next iteration
+  memcpy(state[0], state[1], life_state_buffer_size);
   
   millis = time_ms(&seconds, NULL);  
   APP_LOG(APP_LOG_LEVEL_INFO, "render done: %u.%u", (uint16_t)seconds, millis);

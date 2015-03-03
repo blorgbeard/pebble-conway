@@ -65,8 +65,12 @@ static void screen_update(Layer *layer, GContext *ctx) {
   }
   
   // todo: render to a separate layer most of the time?
-  draw_time(timestring, ctx);
-  
+  draw_time(timestring, ctx);  
+}
+
+static void handle_timer(void *data) {
+  app_timer_register(50, handle_timer, NULL);
+  layer_mark_dirty(screen);
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
@@ -84,7 +88,8 @@ static void init() {
   
   init_life();
   
-  tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  //tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  //tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
 }
 
 static void deinit() {
@@ -95,6 +100,7 @@ static void deinit() {
 
 int main() {
   init();
+  handle_timer(NULL);
   app_event_loop();
   deinit();
 }
