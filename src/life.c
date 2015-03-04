@@ -79,12 +79,12 @@ void live_life(GBitmap* output) {
   
   uint16_t stride_extra = (output->row_size_bytes - (screen_width_px / 8));
   
-  APP_LOG(APP_LOG_LEVEL_INFO, "stride extra: %u", stride_extra);
+  //APP_LOG(APP_LOG_LEVEL_INFO, "stride extra: %u", stride_extra);
   
-  time_t seconds;
-  uint16_t millis = time_ms(&seconds, NULL);
+  time_t seconds1;
+  uint16_t millis1 = time_ms(&seconds1, NULL);
   
-  APP_LOG(APP_LOG_LEVEL_INFO, "render start: %u.%u", (uint16_t)seconds, millis);
+  //APP_LOG(APP_LOG_LEVEL_INFO, "render start: %u.%u", (uint16_t)seconds, millis);
   
   for (int row=0; row < screen_height_cells; row++) {
     for (int col=0; col < screen_width_cells; col += 4) {
@@ -101,7 +101,9 @@ void live_life(GBitmap* output) {
       bmp_pointer1[0] = pixel;
       bmp_pointer2[0] = pixel;
 
-      //if ((uint32_t)state_pointer1[0] != 0) {
+      // check if all 4 bytes we're currently processing are entirely zeros:
+      // no live cells, all with zero neighbours
+      if ((*(uint32_t *)state_pointer1) != 0) {
         // something was non-zero: perform life algorithm
         // for now: easy-mode - ignore cells that we might need to wrap for.
         if ((row != 0) && (col != 0) && (row != (screen_height_cells-1)) && (col != (screen_width_cells-1))) {
@@ -150,7 +152,7 @@ void live_life(GBitmap* output) {
             }
           }
         }        
-      //}
+      }
       
       bmp_pointer1++;
       bmp_pointer2++;    
@@ -165,8 +167,15 @@ void live_life(GBitmap* output) {
   // copy altered buffer for next iteration
   memcpy(state[0], state[1], life_state_buffer_size);
   
-  millis = time_ms(&seconds, NULL);  
-  APP_LOG(APP_LOG_LEVEL_INFO, "render done: %u.%u", (uint16_t)seconds, millis);
+  time_t seconds2;
+  uint16_t millis2 = time_ms(&seconds2, NULL);
+  
+  seconds2 -= seconds1;
+  seconds1 = 0;
+  uint16_t render_time_ms = ((seconds2 * 1000) + millis2) - (millis1);
+  if (render_time_ms > 15) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "render took a long time: %u ms", render_time_ms);
+  }
   
 }
 
