@@ -43,11 +43,27 @@ static void draw_time(char *timestring, GContext *ctx) {
     GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
 }
 
+static bool reseed = true;
+
 static void screen_update(Layer *layer, GContext *ctx) {
   
   // assume this layer is full-screen
+    
+  if (reseed) {
+    APP_LOG(APP_LOG_LEVEL_INFO, "reseedery");
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_fill_rect(ctx, GRect(0, 0, 144, 168), 0, GCornerNone);
+    draw_time(timestring, ctx);
+  }
   
   GBitmap *bmp = graphics_capture_frame_buffer(ctx);
+  
+  if (reseed) {
+    seed_life(bmp);
+    //graphics_release_frame_buffer(ctx, bmp);  // temp
+    //return;
+    reseed = false;
+  }
   
   live_life(bmp);
   
@@ -70,16 +86,12 @@ static void handle_timer(void *data) {
 
 static void update_time_string(struct tm *tick_time) {  
   clock_copy_time_string(timestring, sizeof("00:00 AM"));
-  return;
-  if(clock_is_24h_style()) {
-    strftime(timestring, sizeof("00:00"), "%H:%M", tick_time);
-  } else {
-    strftime(timestring, sizeof("00:00"), "%I:%M", tick_time);
-  }
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {  
   update_time_string(tick_time);
+  // seed life buffer with time
+  reseed = true;
 }
 
 static void init() {
